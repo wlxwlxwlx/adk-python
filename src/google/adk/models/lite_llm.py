@@ -817,7 +817,7 @@ def _message_to_generate_content_response(
       if tool_call.type == "function":
         part = types.Part.from_function_call(
             name=tool_call.function.name,
-            args=json.loads(tool_call.function.arguments or "{}"),
+            args=safe_json_loads(tool_call.function.arguments),
         )
         part.function_call.id = tool_call.id
         parts.append(part)
@@ -828,7 +828,29 @@ def _message_to_generate_content_response(
       model_version=model_version,
   )
 
-
+def safe_json_loads(json_str):
+    """安全解析JSON，处理转义问题"""
+    if not json_str or json_str.strip() == "":
+        return {}
+    
+    try:
+        # 第一次解析
+        result = json.loads(json_str)
+        
+        # 如果结果是字符串，说明可能有转义，需要再次解析
+        if isinstance(result, str):
+            try:
+                return json.loads(result)
+            except json.JSONDecodeError:
+                # 第二次解析失败，返回空字典
+                return {}
+        
+        # 如果第一次解析就是字典，直接返回
+        return result
+        
+    except json.JSONDecodeError:
+        # 第一次解析就失败，返回空字典
+        return {}
 def _to_litellm_response_format(
     response_schema: types.SchemaUnion,
 ) -> Optional[Dict[str, Any]]:
