@@ -34,11 +34,12 @@ from types import SimpleNamespace
 logger = logging.getLogger('google_adk.' + __name__)
 
 
+def maybe_dict_to_obj(data):
+  """如果是 dict 就转成对象，否则原样返回。"""
+  return SimpleNamespace(**data) if isinstance(data, dict) else data
+
+
 class _ContentLlmRequestProcessor(BaseLlmRequestProcessor):
-  """Builds the contents for the LLM request."""
-  def maybe_dict_to_obj(data):
-    """如果是 dict 就转成对象，否则原样返回。"""
-    return SimpleNamespace(**data) if isinstance(data, dict) else data
 
   @override
   async def run_async(
