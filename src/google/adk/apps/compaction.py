@@ -20,8 +20,14 @@ from google.adk.apps.app import App
 from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
 from google.adk.sessions.base_session_service import BaseSessionService
 from google.adk.sessions.session import Session
+from types import SimpleNamespace
 
 logger = logging.getLogger('google_adk.' + __name__)
+
+
+def maybe_dict_to_obj(data):
+  """如果是 dict 就转成对象，否则原样返回。"""
+  return SimpleNamespace(**data) if isinstance(data, dict) else data
 
 
 async def _run_compaction_for_sliding_window(
@@ -112,6 +118,7 @@ async def _run_compaction_for_sliding_window(
   # Find the last compaction event and its range.
   last_compacted_end_timestamp = 0.0
   for event in reversed(events):
+    event.actions.compaction = maybe_dict_to_obj(event.actions.compaction)
     if (
         event.actions
         and event.actions.compaction
