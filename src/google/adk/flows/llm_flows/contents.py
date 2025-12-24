@@ -29,12 +29,16 @@ from ._base_llm_processor import BaseLlmRequestProcessor
 from .functions import remove_client_function_call_id
 from .functions import REQUEST_CONFIRMATION_FUNCTION_CALL_NAME
 from .functions import REQUEST_EUC_FUNCTION_CALL_NAME
+from types import SimpleNamespace
 
 logger = logging.getLogger('google_adk.' + __name__)
 
 
 class _ContentLlmRequestProcessor(BaseLlmRequestProcessor):
   """Builds the contents for the LLM request."""
+  def maybe_dict_to_obj(data):
+    """如果是 dict 就转成对象，否则原样返回。"""
+    return SimpleNamespace(**data) if isinstance(data, dict) else data
 
   @override
   async def run_async(
@@ -308,7 +312,7 @@ def _process_compaction_events(events: list[Event]) -> list[Event]:
   # Iterate in reverse to easily handle overlapping compactions.
   for event in reversed(events):
     if event.actions and event.actions.compaction:
-      compaction = event.actions.compaction
+      compaction = maybe_dict_to_obj(event.actions.compaction)
       if (
           compaction.start_timestamp is not None
           and compaction.end_timestamp is not None
