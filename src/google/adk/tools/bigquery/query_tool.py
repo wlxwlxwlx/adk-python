@@ -68,9 +68,14 @@ def _execute_sql(
     bq_connection_properties = []
 
     # BigQuery job labels if applicable
-    bq_job_labels = {}
+    bq_job_labels = (
+        settings.job_labels.copy() if settings and settings.job_labels else {}
+    )
+
     if caller_id:
       bq_job_labels["adk-bigquery-tool"] = caller_id
+    if settings and settings.application_name:
+      bq_job_labels["adk-bigquery-application-name"] = settings.application_name
 
     if not settings or settings.write_mode == WriteMode.BLOCKED:
       dry_run_query_job = bq_client.query(
