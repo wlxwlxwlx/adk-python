@@ -247,9 +247,7 @@ def change_issue_type(issue_number: int, issue_type: str) -> dict[str, Any]:
 
 
 root_agent = Agent(
-    # 收费模型换成免费模型跑通测试用例
-    # model="gemini-2.5-pro",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-pro",
     name="adk_triaging_assistant",
     description="Triage ADK issues.",
     instruction=f"""
