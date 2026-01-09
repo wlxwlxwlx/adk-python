@@ -320,22 +320,15 @@ async def _execute_single_function_call_async(
       invocation_context, function_call, tool_confirmation
   )
 
-  try:
-    tool = _get_tool(function_call, tools_dict)
-  except ValueError as tool_error:
-    tool = BaseTool(name=function_call.name, description='Tool not found')
-    error_response = await _run_on_tool_error_callbacks(
-        tool=tool,
-        tool_args=function_args,
-        tool_context=tool_context,
-        error=tool_error,
+  tool = _get_tool(function_call, tools_dict)
+
+  # Check if this is a tool not found case
+  if hasattr(tool, 'error_msg'):
+    # This is a ToolNotFoundTool, call it directly to get the error response
+    function_response = await tool.run_async(args=function_args, tool_context=tool_context)
+    return __build_response_event(
+        tool, function_response, tool_context, invocation_context
     )
-    if error_response is not None:
-      return __build_response_event(
-          tool, error_response, tool_context, invocation_context
-      )
-    else:
-      raise tool_error
 
   async def _run_with_trace():
     nonlocal function_args
@@ -716,6 +709,7 @@ def _get_tool(
 ):
   """Returns the tool corresponding to the function call."""
   if function_call.name not in tools_dict:
+    # Create a special tool that represents "tool not found"
     available = list(tools_dict.keys())
     error_msg = (
         f"Tool '{function_call.name}' not found.\nAvailable tools:"
@@ -726,7 +720,16 @@ def _get_tool(
         ' tool usage is clear\n  - Verify tool is included in agent.tools'
         ' list\n  - Check for typos in function name'
     )
-    raise ValueError(error_msg)
+    # Return a special tool object instead of raising an exception
+    class ToolNotFoundTool(BaseTool):
+      def __init__(self, name: str, error_msg: str):
+        super().__init__(name=name, description="Tool not found handler")
+        self.error_msg = error_msg
+
+      async def run_async(self, args: dict[str, Any], tool_context) -> Any:
+        return {"error": self.error_msg, "tool_name": self.name}
+
+    return ToolNotFoundTool(function_call.name, error_msg)
 
   return tools_dict[function_call.name]
 
