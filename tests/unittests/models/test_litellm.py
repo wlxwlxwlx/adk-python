@@ -3477,7 +3477,7 @@ class TestValidateAndFixToolCallSequence(unittest.TestCase):
           ChatCompletionAssistantToolCall(
             type="function",
             id="call_1",
-            function={"name": "search", "arguments": '{"query": "test"}'}
+            function=Function(name="search", arguments='{"query": "test"}')
           )
         ]
       ),
@@ -3506,7 +3506,7 @@ class TestValidateAndFixToolCallSequence(unittest.TestCase):
           ChatCompletionAssistantToolCall(
             type="function",
             id="call_1",
-            function={"name": "search", "arguments": '{"query": "test"}'}
+            function=Function(name="search", arguments='{"query": "test"}')
           )
         ]
       ),
@@ -3531,12 +3531,12 @@ class TestValidateAndFixToolCallSequence(unittest.TestCase):
           ChatCompletionAssistantToolCall(
             type="function",
             id="call_1",
-            function={"name": "search", "arguments": '{"query": "test1"}'}
+            function=Function(name="search", arguments='{"query": "test1"}')
           ),
           ChatCompletionAssistantToolCall(
             type="function",
             id="call_2",
-            function={"name": "search", "arguments": '{"query": "test2"}'}
+            function=Function(name="search", arguments='{"query": "test2"}')
           )
         ]
       ),
@@ -3570,12 +3570,12 @@ class TestValidateAndFixToolCallSequence(unittest.TestCase):
           ChatCompletionAssistantToolCall(
             type="function",
             id="call_1",
-            function={"name": "search", "arguments": '{"query": "test1"}'}
+            function=Function(name="search", arguments='{"query": "test1"}')
           ),
           ChatCompletionAssistantToolCall(
             type="function",
             id="call_2",
-            function={"name": "search", "arguments": '{"query": "test2"}'}
+            function=Function(name="search", arguments='{"query": "test2"}')
           )
         ]
       ),

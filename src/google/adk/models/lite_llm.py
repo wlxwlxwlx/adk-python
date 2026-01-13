@@ -1573,7 +1573,7 @@ class LiteLlm(BaseLlm):
     )
 
     # Validate and fix message sequence to ensure tool calls have responses
-    normalized_messages = _validate_and_fix_tool_call_sequence(normalized_messages)
+    normalized_messages = self._validate_and_fix_tool_call_sequence(normalized_messages)
 
     if "functions" in self._additional_args:
       # LiteLLM does not support both tools and functions together.
