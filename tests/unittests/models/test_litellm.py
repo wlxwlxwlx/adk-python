@@ -49,7 +49,10 @@ from google.adk.models.llm_request import LlmRequest
 from google.genai import types
 import litellm
 from litellm import ChatCompletionAssistantMessage
+from litellm import ChatCompletionAssistantToolCall
 from litellm import ChatCompletionMessageToolCall
+from litellm import ChatCompletionToolMessage
+from litellm import ChatCompletionUserMessage
 from litellm import Function
 from litellm.types.utils import ChatCompletionDeltaToolCall
 from litellm.types.utils import Choices
@@ -3459,3 +3462,152 @@ def test_handles_litellm_logger_names(logger_name):
   finally:
     # Clean up
     test_logger.removeHandler(handler)
+
+
+class TestValidateAndFixToolCallSequence(unittest.TestCase):
+  """Test the _validate_and_fix_tool_call_sequence method."""
+
+  def test_valid_sequence_passes_through(self):
+    """Test that valid tool call sequences are preserved."""
+    messages = [
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="I'll help you with that.",
+        tool_calls=[
+          ChatCompletionAssistantToolCall(
+            type="function",
+            id="call_1",
+            function={"name": "search", "arguments": '{"query": "test"}'}
+          )
+        ]
+      ),
+      ChatCompletionToolMessage(
+        role="tool",
+        tool_call_id="call_1",
+        content="Search results..."
+      ),
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="Here are the results."
+      )
+    ]
+
+    result = LiteLlm._validate_and_fix_tool_call_sequence(messages)
+    self.assertEqual(len(result), 3)
+    self.assertEqual(result, messages)
+
+  def test_incomplete_tool_call_removed(self):
+    """Test that assistant messages with incomplete tool calls are removed."""
+    messages = [
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="I'll search for that.",
+        tool_calls=[
+          ChatCompletionAssistantToolCall(
+            type="function",
+            id="call_1",
+            function={"name": "search", "arguments": '{"query": "test"}'}
+          )
+        ]
+      ),
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="Let me also check something else."
+      )
+    ]
+
+    result = LiteLlm._validate_and_fix_tool_call_sequence(messages)
+    # The first message should be removed, second should remain
+    self.assertEqual(len(result), 1)
+    self.assertEqual(result[0], messages[1])
+
+  def test_multiple_tool_calls_with_complete_responses(self):
+    """Test multiple tool calls with complete responses."""
+    messages = [
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="I'll do two searches.",
+        tool_calls=[
+          ChatCompletionAssistantToolCall(
+            type="function",
+            id="call_1",
+            function={"name": "search", "arguments": '{"query": "test1"}'}
+          ),
+          ChatCompletionAssistantToolCall(
+            type="function",
+            id="call_2",
+            function={"name": "search", "arguments": '{"query": "test2"}'}
+          )
+        ]
+      ),
+      ChatCompletionToolMessage(
+        role="tool",
+        tool_call_id="call_1",
+        content="Results for test1..."
+      ),
+      ChatCompletionToolMessage(
+        role="tool",
+        tool_call_id="call_2",
+        content="Results for test2..."
+      ),
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="Here are all the results."
+      )
+    ]
+
+    result = LiteLlm._validate_and_fix_tool_call_sequence(messages)
+    self.assertEqual(len(result), 4)
+    self.assertEqual(result, messages)
+
+  def test_partial_tool_responses_removed(self):
+    """Test that messages with only partial tool responses are removed."""
+    messages = [
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="I'll do two searches.",
+        tool_calls=[
+          ChatCompletionAssistantToolCall(
+            type="function",
+            id="call_1",
+            function={"name": "search", "arguments": '{"query": "test1"}'}
+          ),
+          ChatCompletionAssistantToolCall(
+            type="function",
+            id="call_2",
+            function={"name": "search", "arguments": '{"query": "test2"}'}
+          )
+        ]
+      ),
+      ChatCompletionToolMessage(
+        role="tool",
+        tool_call_id="call_1",
+        content="Results for test1..."
+      ),
+      # Missing response for call_2
+      ChatCompletionAssistantMessage(
+        role="assistant",
+        content="Here are the results."
+      )
+    ]
+
+    result = LiteLlm._validate_and_fix_tool_call_sequence(messages)
+    # The first assistant message should be removed, tool response and second assistant should remain
+    self.assertEqual(len(result), 2)
+    self.assertEqual(result[0], messages[1])  # tool response
+    self.assertEqual(result[1], messages[2])  # second assistant message
+
+  def test_empty_messages_list(self):
+    """Test that empty message list is handled correctly."""
+    result = LiteLlm._validate_and_fix_tool_call_sequence([])
+    self.assertEqual(result, [])
+
+  def test_no_tool_calls(self):
+    """Test messages without tool calls pass through unchanged."""
+    messages = [
+      ChatCompletionUserMessage(role="user", content="Hello"),
+      ChatCompletionAssistantMessage(role="assistant", content="Hi there!")
+    ]
+
+    result = LiteLlm._validate_and_fix_tool_call_sequence(messages)
+    self.assertEqual(result, messages)
