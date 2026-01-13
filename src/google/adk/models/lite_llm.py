@@ -1595,7 +1595,12 @@ class LiteLlm(BaseLlm):
       tool_calls = msg.get('tool_calls') if isinstance(msg, dict) else getattr(msg, 'tool_calls', None)
       tool_call_id = msg.get('tool_call_id') if isinstance(msg, dict) else getattr(msg, 'tool_call_id', None)
       if tool_calls:
-        logger.debug(f"Message {idx}: role={role}, tool_calls={[tc.id for tc in tool_calls if tc.id]}")
+        tool_call_ids = []
+        for tc in tool_calls:
+          tc_id = tc.get('id') if isinstance(tc, dict) else getattr(tc, 'id', None)
+          if tc_id:
+            tool_call_ids.append(tc_id)
+        logger.debug(f"Message {idx}: role={role}, tool_calls={tool_call_ids}")
       elif tool_call_id:
         logger.debug(f"Message {idx}: role={role}, tool_call_id={tool_call_id}")
       else:
@@ -1764,6 +1769,12 @@ class LiteLlm(BaseLlm):
           tool_call_ids_with_responses.add(tool_call_id)
       except Exception as e:
         logger.warning(f"Error checking message for tool responses: {e}")
+        # Try alternative access patterns
+        try:
+          if hasattr(msg, 'role') and msg.role == "tool" and hasattr(msg, 'tool_call_id') and msg.tool_call_id:
+            tool_call_ids_with_responses.add(msg.tool_call_id)
+        except Exception:
+          pass
 
     logger.debug(f"Found tool_call_ids with responses: {tool_call_ids_with_responses}")
 
@@ -1776,7 +1787,11 @@ class LiteLlm(BaseLlm):
 
         # If this is an assistant message with tool_calls, check if all tool_call_ids have responses
         if role == "assistant" and tool_calls:
-          tool_call_ids = {tc.id for tc in tool_calls if tc.id}
+          tool_call_ids = set()
+          for tc in tool_calls:
+            tc_id = tc.get('id') if isinstance(tc, dict) else getattr(tc, 'id', None)
+            if tc_id:
+              tool_call_ids.add(tc_id)
           missing_responses = tool_call_ids - tool_call_ids_with_responses
 
           if missing_responses:
