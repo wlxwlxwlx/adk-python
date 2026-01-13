@@ -1744,8 +1744,8 @@ class LiteLlm(BaseLlm):
 
       # If this is an assistant message with tool_calls, check if all tool_call_ids
       # have corresponding tool responses later in the conversation
-      if (isinstance(message, ChatCompletionAssistantMessage) and
-          message.tool_calls):
+      if (getattr(message, 'role', None) == "assistant" and
+          getattr(message, 'tool_calls', None)):
         tool_call_ids = {tc.id for tc in message.tool_calls if tc.id}
 
         # Look ahead to find tool responses for these IDs
@@ -1753,14 +1753,14 @@ class LiteLlm(BaseLlm):
         j = i + 1
         while j < len(messages):
           next_message = messages[j]
-          if isinstance(next_message, ChatCompletionToolMessage):
-            if next_message.tool_call_id in tool_call_ids:
-              found_responses.add(next_message.tool_call_id)
+          if getattr(next_message, 'role', None) == "tool":
+            if getattr(next_message, 'tool_call_id', None) in tool_call_ids:
+              found_responses.add(getattr(next_message, 'tool_call_id'))
               # If we've found responses for all tool calls, we can include this message
               if found_responses == tool_call_ids:
                 validated_messages.append(message)
                 break
-          elif isinstance(next_message, ChatCompletionAssistantMessage):
+          elif getattr(next_message, 'role', None) == "assistant":
             # Hit another assistant message, check if it has tool calls that depend on previous ones
             # For now, be conservative and skip this message if we haven't found all responses
             break
