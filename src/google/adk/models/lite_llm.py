@@ -1573,7 +1573,9 @@ class LiteLlm(BaseLlm):
     )
 
     # Validate and fix message sequence to ensure tool calls have responses
+    logger.debug(f"Before validation: {len(normalized_messages)} messages")
     normalized_messages = self._validate_and_fix_tool_call_sequence(normalized_messages)
+    logger.debug(f"After validation: {len(normalized_messages)} messages")
 
     if "functions" in self._additional_args:
       # LiteLLM does not support both tools and functions together.
@@ -1585,6 +1587,19 @@ class LiteLlm(BaseLlm):
         "tools": tools,
         "response_format": response_format,
     }
+
+    # Log message summary for debugging
+    logger.debug(f"Sending {len(normalized_messages)} messages to LLM")
+    for idx, msg in enumerate(normalized_messages):
+      role = msg.get('role') if isinstance(msg, dict) else getattr(msg, 'role', 'unknown')
+      tool_calls = msg.get('tool_calls') if isinstance(msg, dict) else getattr(msg, 'tool_calls', None)
+      tool_call_id = msg.get('tool_call_id') if isinstance(msg, dict) else getattr(msg, 'tool_call_id', None)
+      if tool_calls:
+        logger.debug(f"Message {idx}: role={role}, tool_calls={[tc.id for tc in tool_calls if tc.id]}")
+      elif tool_call_id:
+        logger.debug(f"Message {idx}: role={role}, tool_call_id={tool_call_id}")
+      else:
+        logger.debug(f"Message {idx}: role={role}")
     completion_args.update(self._additional_args)
 
     if generation_params:
@@ -1737,55 +1752,49 @@ class LiteLlm(BaseLlm):
     if not messages:
       return messages
 
+    logger.debug(f"Validating {len(messages)} messages for tool call completeness")
+
+    # First pass: build a set of all tool_call_ids that have responses
+    tool_call_ids_with_responses = set()
+    for msg in messages:
+      try:
+        role = msg.get('role') if isinstance(msg, dict) else getattr(msg, 'role', None)
+        tool_call_id = msg.get('tool_call_id') if isinstance(msg, dict) else getattr(msg, 'tool_call_id', None)
+        if role == "tool" and tool_call_id:
+          tool_call_ids_with_responses.add(tool_call_id)
+      except Exception as e:
+        logger.warning(f"Error checking message for tool responses: {e}")
+
+    logger.debug(f"Found tool_call_ids with responses: {tool_call_ids_with_responses}")
+
+    # Second pass: validate messages
     validated_messages = []
-    i = 0
-    while i < len(messages):
-      message = messages[i]
+    for i, message in enumerate(messages):
+      try:
+        role = message.get('role') if isinstance(message, dict) else getattr(message, 'role', None)
+        tool_calls = message.get('tool_calls') if isinstance(message, dict) else getattr(message, 'tool_calls', None)
 
-      # If this is an assistant message with tool_calls, check if all tool_call_ids
-      # have corresponding tool responses later in the conversation
-      if (getattr(message, 'role', None) == "assistant" and
-          getattr(message, 'tool_calls', None)):
-        tool_call_ids = {tc.id for tc in message.tool_calls if tc.id}
+        # If this is an assistant message with tool_calls, check if all tool_call_ids have responses
+        if role == "assistant" and tool_calls:
+          tool_call_ids = {tc.id for tc in tool_calls if tc.id}
+          missing_responses = tool_call_ids - tool_call_ids_with_responses
 
-        # Look ahead to find tool responses for these IDs
-        found_responses = set()
-        j = i + 1
-        while j < len(messages):
-          next_message = messages[j]
-          if getattr(next_message, 'role', None) == "tool":
-            if getattr(next_message, 'tool_call_id', None) in tool_call_ids:
-              found_responses.add(getattr(next_message, 'tool_call_id'))
-              # If we've found responses for all tool calls, we can include this message
-              if found_responses == tool_call_ids:
-                validated_messages.append(message)
-                break
-          elif getattr(next_message, 'role', None) == "assistant":
-            # Hit another assistant message, check if it has tool calls that depend on previous ones
-            # For now, be conservative and skip this message if we haven't found all responses
-            break
-          j += 1
+          if missing_responses:
+            logger.warning(
+              f"Skipping assistant message at index {i} with incomplete tool call sequence. "
+              f"Missing responses for tool_call_ids: {missing_responses}"
+            )
+            continue  # Skip this message
+          else:
+            logger.debug(f"Including assistant message at index {i} with complete tool calls: {tool_call_ids}")
 
-        # If we didn't find responses for all tool calls, skip this message
-        if found_responses != tool_call_ids:
-          logger.warning(
-            f"Skipping assistant message with incomplete tool call sequence. "
-            f"Tool call IDs: {tool_call_ids}, Found responses: {found_responses}"
-          )
-          i += 1
-          continue
-
-        # Include all the tool response messages we found
-        validated_messages.append(message)
-        while i + 1 < j:
-          i += 1
-          validated_messages.append(messages[i])
-
-      else:
-        # Not an assistant message with tool calls, include it
+        # Include the message (either it's not an assistant with tool_calls, or it has complete responses)
         validated_messages.append(message)
 
-      i += 1
+      except Exception as e:
+        logger.warning(f"Error processing message at index {i}: {e}")
+        # Include the message anyway to avoid breaking the conversation
+        validated_messages.append(message)
 
     return validated_messages
 
